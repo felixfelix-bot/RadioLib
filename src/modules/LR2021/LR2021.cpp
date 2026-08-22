@@ -214,14 +214,20 @@ int16_t LR2021::transmit(const uint8_t* data, size_t len, uint8_t addr) {
       return(RADIOLIB_ERR_PACKET_TOO_LONG);
     }  
   } 
-  if(len > RADIOLIB_LR2021_MAX_PACKET_LENGTH) {
-    return(RADIOLIB_ERR_PACKET_TOO_LONG);
-  }
 
   // get currently active modem
   uint8_t modem = RADIOLIB_LR2021_PACKET_TYPE_NONE;
   state = getPacketType(&modem);
   RADIOLIB_ASSERT(state);
+
+  // check packet length - FLRC supports payloads of up to 511 bytes
+  size_t maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH;
+  if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
+    maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH_FLRC;
+  }
+  if(len > maxLen) {
+    return(RADIOLIB_ERR_PACKET_TOO_LONG);
+  }
   RadioLibTime_t timeout = getTimeOnAir(len);
   if(modem == RADIOLIB_LR2021_PACKET_TYPE_LORA) {
     // calculate timeout (150% of expected time-on-air)
@@ -275,7 +281,12 @@ int16_t LR2021::receive(uint8_t* data, size_t len, RadioLibTime_t timeout) {
        (modem == RADIOLIB_LR2021_PACKET_TYPE_OOK)) {
       // calculate timeout (500 % of expected time-one-air)
       size_t maxLen = len;
-      if(len == 0) { maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH; }
+      if(len == 0) {
+        maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH;
+        if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
+          maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH_FLRC;
+        }
+      }
       timeoutInternal = (getTimeOnAir(maxLen) * 5) / 1000;
     
     } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_LR_FHSS) {
@@ -859,6 +870,16 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
       state = setRxPath(this->highFreq ? RADIOLIB_LR2021_RX_PATH_HF : RADIOLIB_LR2021_RX_PATH_LF, this->highFreq ? this->gainModeHf : this->gainModeLf);
       RADIOLIB_ASSERT(state);
 
+      // calibrate the image-reject front end for the selected Rx path
+      // (CALIB_FRONT_END is mandatory before starting Rx; see LR2021 datasheet)
+      uint16_t calFreq = (uint16_t)((this->freqMHz / 4.0f) + 0.5f);
+      if(this->highFreq) {
+        calFreq |= RADIOLIB_LR2021_CALIBRATE_FE_HF_PATH;
+      }
+      const uint16_t calFreqs[3] = { calFreq, 0x0000, 0x0000 };
+      state = this->calibrateFrontEnd(calFreqs);
+      RADIOLIB_ASSERT(state);
+
       // set DIO mapping
       if(cfg->receive.timeout != RADIOLIB_LR2021_RX_TIMEOUT_INF) {
         cfg->receive.irqMask |= (1UL << RADIOLIB_IRQ_TIMEOUT);
@@ -884,18 +905,24 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
     } break;
   
     case(RADIOLIB_RADIO_MODE_TX): {
-      // check packet length
-      if(cfg->transmit.len > RADIOLIB_LR2021_MAX_PACKET_LENGTH) {
-        return(RADIOLIB_ERR_PACKET_TOO_LONG);
-      }
-
       // maximum packet length is decreased by 1 when address filtering is active
       //! \todo [LR2021] implement GFSK address filtering
 
-      // set packet Length
+      // get the currently active modem
       uint8_t modem = RADIOLIB_LR2021_PACKET_TYPE_NONE;
       state = getPacketType(&modem);
       RADIOLIB_ASSERT(state);
+
+      // check packet length - FLRC supports payloads of up to 511 bytes
+      size_t maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH;
+      if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
+        maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH_FLRC;
+      }
+      if(cfg->transmit.len > maxLen) {
+        return(RADIOLIB_ERR_PACKET_TOO_LONG);
+      }
+
+      // set packet Length
       if(modem == RADIOLIB_LR2021_PACKET_TYPE_LORA) {
         state = setLoRaPacketParams(this->preambleLengthLoRa, this->headerType, cfg->transmit.len, this->crcTypeLoRa, this->invertIQEnabled);
       

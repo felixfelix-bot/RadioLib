@@ -15,6 +15,8 @@
 // LR2021 physical layer properties
 #define RADIOLIB_LR2021_FREQUENCY_STEP_SIZE                     1.0
 #define RADIOLIB_LR2021_MAX_PACKET_LENGTH                       255
+// FLRC packets may be up to 511 bytes long (SET_FLRC_PACKET_PARAMS payload length is 16-bit)
+#define RADIOLIB_LR2021_MAX_PACKET_LENGTH_FLRC                  511
 #define RADIOLIB_LR2021_CRYSTAL_FREQ                            32.0
 #define RADIOLIB_LR2021_DIV_EXPONENT                            25
 
@@ -506,14 +508,24 @@ class LR2021: public LRxxxx {
       \param len Packet length.
       \returns \ref status_codes
     */
-    int16_t fixedPacketLengthMode(uint8_t len = RADIOLIB_LR2021_MAX_PACKET_LENGTH);
+    int16_t fixedPacketLengthMode(uint16_t len = RADIOLIB_LR2021_MAX_PACKET_LENGTH);
 
     /*!
       \brief Set modem in variable packet length mode. Available in GFSK mode only.
       \param maxLen Maximum packet length.
       \returns \ref status_codes
     */
-    int16_t variablePacketLengthMode(uint8_t maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH);
+    int16_t variablePacketLengthMode(uint16_t maxLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH);
+
+    /*!
+      \brief Sets which FLRC sync words the receiver matches against (sw_match bits
+      of the SET_FLRC_PACKET_PARAMS command). Available in FLRC mode only.
+      \param syncMatch Sync word match configuration: RADIOLIB_LR2021_FLRC_SYNC_MATCH_1
+      (match sync word 1 only, default), RADIOLIB_LR2021_FLRC_SYNC_MATCH_1_2 (match sync
+      words 1 and 2) or RADIOLIB_LR2021_FLRC_SYNC_MATCH_1_2_3 (match sync words 1, 2 and 3).
+      \returns \ref status_codes
+    */
+    int16_t setFlrcSyncWordMatch(uint8_t syncMatch);
 
     /*!
       \brief Sets GFSK whitening parameters.
@@ -698,11 +710,13 @@ class LR2021: public LRxxxx {
     // cached FLRC parameters
     uint16_t bitRateFlrc = 0;
     uint8_t codingRateFlrc = 0;
+    uint8_t flrcSyncMatch = RADIOLIB_LR2021_FLRC_SYNC_MATCH_1;
+    uint16_t flrcPayloadLen = RADIOLIB_LR2021_MAX_PACKET_LENGTH;
 
     int16_t modSetup(float freq, float tcxoVoltage, uint8_t modem);
     bool findChip(void);
     int16_t config(uint8_t modem);
-    int16_t setPacketMode(uint8_t mode, uint8_t len);
+    int16_t setPacketMode(uint8_t mode, uint16_t len);
     int16_t startCad(uint8_t symbolNum, uint8_t detPeak, uint8_t detMin, uint8_t exitMode, RadioLibTime_t timeout);
 
     // chip control commands

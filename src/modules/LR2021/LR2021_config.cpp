@@ -302,7 +302,7 @@ int16_t LR2021::setPreambleLength(size_t preambleLength) {
       return(RADIOLIB_ERR_INVALID_PREAMBLE_LENGTH);
     }
     this->preambleLengthGFSK = (preambleLength / 4) - 1;
-    return(setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, RADIOLIB_LR2021_MAX_PACKET_LENGTH));
+    return(setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, this->flrcSyncMatch, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, this->flrcPayloadLen));
 
   }
 
@@ -410,7 +410,7 @@ int16_t LR2021::setCRC(uint8_t len, uint32_t initial, uint32_t polynomial, bool 
     }
     
     this->crcLenGFSK = len ? len - 1 : 0;
-    return(setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, RADIOLIB_LR2021_MAX_PACKET_LENGTH));
+    return(setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, this->flrcSyncMatch, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, this->flrcPayloadLen));
       
   }
 
@@ -599,7 +599,7 @@ int16_t LR2021::setSyncWord(uint8_t* syncWord, size_t len) {
 
       // update sync word length
       this->syncWordLength = len;
-      state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, RADIOLIB_LR2021_MAX_PACKET_LENGTH);
+      state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, this->flrcSyncMatch, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, this->flrcPayloadLen);
       RADIOLIB_ASSERT(state);
 
       sync |= (uint32_t)syncWord[0] << 24;
@@ -610,6 +610,22 @@ int16_t LR2021::setSyncWord(uint8_t* syncWord, size_t len) {
   }
 
   return(RADIOLIB_ERR_WRONG_MODEM);
+}
+
+int16_t LR2021::setFlrcSyncWordMatch(uint8_t syncMatch) {
+  // check active modem
+  uint8_t type = RADIOLIB_LR2021_PACKET_TYPE_NONE;
+  int16_t state = getPacketType(&type);
+  RADIOLIB_ASSERT(state);
+  if(type != RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
+    return(RADIOLIB_ERR_WRONG_MODEM);
+  }
+
+  RADIOLIB_CHECK_RANGE(syncMatch, 0x01, 0x07, RADIOLIB_ERR_INVALID_SYNC_WORD);
+
+  // update the cached value and re-emit packet parameters
+  this->flrcSyncMatch = syncMatch;
+  return(setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, this->flrcSyncMatch, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, this->flrcPayloadLen));
 }
 
 int16_t LR2021::setDataShaping(uint8_t sh) {
@@ -689,11 +705,11 @@ int16_t LR2021::setEncoding(uint8_t encoding) {
   return(state);
 }
 
-int16_t LR2021::fixedPacketLengthMode(uint8_t len) {
+int16_t LR2021::fixedPacketLengthMode(uint16_t len) {
   return(setPacketMode(RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, len));
 }
 
-int16_t LR2021::variablePacketLengthMode(uint8_t maxLen) {
+int16_t LR2021::variablePacketLengthMode(uint16_t maxLen) {
   return(setPacketMode(RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_VARIABLE_8BIT, maxLen));
 }
 
@@ -838,12 +854,16 @@ int16_t LR2021::setRxBoostedGainMode(uint8_t level) {
   return(state);
 }
 
-int16_t LR2021::setPacketMode(uint8_t mode, uint8_t len) {
+int16_t LR2021::setPacketMode(uint8_t mode, uint16_t len) {
   // check active modem
   uint8_t type = RADIOLIB_LR2021_PACKET_TYPE_NONE;
   int16_t state = getPacketType(&type);
   RADIOLIB_ASSERT(state);
   if(type == RADIOLIB_LR2021_PACKET_TYPE_GFSK) {
+    if(len > RADIOLIB_LR2021_MAX_PACKET_LENGTH) {
+      return(RADIOLIB_ERR_PACKET_TOO_LONG);
+    }
+
     // set requested packet mode
     state = setGfskPacketParams(this->preambleLengthGFSK, this->preambleDetLength, false, false, this->addrComp, mode, len, this->crcTypeGFSK, this->whitening);
     RADIOLIB_ASSERT(state);
@@ -853,6 +873,10 @@ int16_t LR2021::setPacketMode(uint8_t mode, uint8_t len) {
     return(state);
   
   } else if(type == RADIOLIB_LR2021_PACKET_TYPE_OOK) {
+    if(len > RADIOLIB_LR2021_MAX_PACKET_LENGTH) {
+      return(RADIOLIB_ERR_PACKET_TOO_LONG);
+    }
+
     // set requested packet mode
     state = setOokPacketParams(this->preambleLengthGFSK, this->addrComp, mode, len, this->crcTypeGFSK, this->whitening);
     RADIOLIB_ASSERT(state);
@@ -862,7 +886,14 @@ int16_t LR2021::setPacketMode(uint8_t mode, uint8_t len) {
     return(state);
   
   } else if(type == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
-    state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, 0x01, mode == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, len);
+    // FLRC supports payloads of up to 511 bytes
+    if(len > RADIOLIB_LR2021_MAX_PACKET_LENGTH_FLRC) {
+      return(RADIOLIB_ERR_PACKET_TOO_LONG);
+    }
+
+    // update the cached length so re-configuration methods preserve it
+    this->flrcPayloadLen = len;
+    state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, this->flrcSyncMatch, mode == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, this->flrcPayloadLen);
     RADIOLIB_ASSERT(state);
 
     this->packetType = mode;

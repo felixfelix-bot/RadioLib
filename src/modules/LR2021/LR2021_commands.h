@@ -507,6 +507,11 @@
 #define RADIOLIB_LR2021_FLRC_CR_1_0                             (0x02UL << 0)   //  7     0                  1 (uncoded)
 #define RADIOLIB_LR2021_FLRC_CR_2_3                             (0x03UL << 0)   //  7     0                  2/3
 
+// RADIOLIB_LR2021_CMD_SET_FLRC_PACKET_PARAMS
+#define RADIOLIB_LR2021_FLRC_SYNC_MATCH_1                       (0x01UL << 0)   //  5     3     sync word match: sync word 1 only (default)
+#define RADIOLIB_LR2021_FLRC_SYNC_MATCH_1_2                     (0x03UL << 0)   //  5     3                       sync words 1 and 2
+#define RADIOLIB_LR2021_FLRC_SYNC_MATCH_1_2_3                   (0x07UL << 0)   //  5     3                       sync words 1, 2 and 3
+
 // RADIOLIB_LR2021_CMD_SET_OOK_MODULATION_PARAMS
 #define RADIOLIB_LR2021_OOK_DEPTH_FULL                          (0x00UL << 0)   //  7     0     magnitude depth: limited by the PA
 #define RADIOLIB_LR2021_OOK_DEPTH_20_DB                         (0x01UL << 0)   //  7     0                      20 dB maximum
