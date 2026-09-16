@@ -933,7 +933,7 @@ int16_t LR2021::stageMode(RadioModeType_t mode, RadioModeConfig_t* cfg) {
         state = setOokPacketParams(this->preambleLengthGFSK, this->addrComp, this->packetType, cfg->transmit.len, this->crcTypeGFSK, this->whitening);
 
       } else if(modem == RADIOLIB_LR2021_PACKET_TYPE_FLRC) {
-        state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, 0x01, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, cfg->transmit.len);
+        state = setFlrcPacketParams(this->preambleLengthGFSK, this->syncWordLength, 1, this->flrcSyncMatch, this->packetType == RADIOLIB_LR2021_GFSK_OOK_PACKET_FORMAT_FIXED, this->crcLenGFSK, cfg->transmit.len);
       
       } else {
         return(RADIOLIB_ERR_WRONG_MODEM);
